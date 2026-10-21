@@ -7,25 +7,65 @@
 import { todo } from './todo.js';
 
 /** a + b */
-export function add(a, b) { return todo('vec3.add'); }
+export function add(a, b) {
+  return new Float32Array([
+    a[0] + b[0],
+    a[1] + b[1],
+    a[2] + b[2],
+  ]);
+}
 
 /** a − b */
-export function sub(a, b) { return todo('vec3.sub'); }
+export function sub(a, b) {
+  return new Float32Array([
+    a[0] - b[0],
+    a[1] - b[1],
+    a[2] - b[2],
+  ]);
+}
 
 /** s · a  (s is a number) */
-export function scale(a, s) { return todo('vec3.scale'); }
+export function scale(a, s) {
+  return new Float32Array([
+    a[0] * s,
+    a[1] * s,
+    a[2] * s,
+  ]);
+}
 
 /** a · b  → number */
-export function dot(a, b) { return todo('vec3.dot'); }
+export function dot(a, b) {
+  return a[0]*b[0] + a[1]*b[1] + a[2]*b[2];
+}
 
 /** a × b  (right-handed: cross([1,0,0],[0,1,0]) = [0,0,1]) */
-export function cross(a, b) { return todo('vec3.cross'); }
+export function cross(a, b) {
+  return new Float32Array([
+    a[1]*b[2] - a[2]*b[1],
+    a[2]*b[0] - a[0]*b[2],
+    a[0]*b[1] - a[1]*b[0]
+  ]);
+}
 
 /** |a|  → number */
-export function length(a) { return todo('vec3.length'); }
+export function length(a) {
+  return Math.sqrt(a[0]*a[0] + a[1]*a[1] + a[2]*a[2]);
+}
 
 /**
  * a / |a|.
  * For a zero-length vector return [0, 0, 0] — never NaN.
  */
-export function normalize(a) { return todo('vec3.normalize'); }
+export function normalize(a) {
+  const len = length(a);
+
+  if (len === 0) {
+    return new Float32Array([0, 0, 0]);
+  }
+
+  return new Float32Array([
+    a[0]/len,
+    a[1]/len,
+    a[2]/len
+  ]);
+}
