@@ -25,31 +25,190 @@
  * counter in the panel is correct (Part E).
  */
 
+import meshWGSL from "../render/shaders/mesh.wgsl?raw";
+import { createShader, fragmentConstants } from "../render/shader.js";
+import { DEPTH_FORMAT } from "../render/renderer.js";
+import { cube } from "./geometry.js";
+import * as mat4 from "../math/mat4.js";
+
 export function createScene({ gpu, renderer, painting, panel }) {
   const { device } = gpu;
   const state = {
     debugAxes: false,
+    // state for one of objects for part A
+    tx: -0.6,
+    ty: 0.2,
+    tz: 0.3,
+    rotX: 0.1,
+    rotY: 0.2,
+    rotZ: 0.5,
+    scaleX: 0.35,
+    scaleY: 0.2,
+    scaleZ: 0.2,
+    useTRS: true,
   };
 
+  // cube stuff
+  const cubeVerts = cube();
+  const cubeBuffer = device.createBuffer({
+    size: cubeVerts.byteLength,
+    usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+  });
+  device.queue.writeBuffer(cubeBuffer, 0, cubeVerts);
+
+  const shaderModule = createShader(device, meshWGSL, "mesh");
+  const pipeline = device.createRenderPipeline({
+    layout: "auto",
+    vertex: {
+      module: shaderModule,
+      entryPoint: "vs",
+      buffers: [
+        {
+          arrayStride: 6 * 4,
+          attributes: [
+            { shaderLocation: 0, offset: 0, format: "float32x3" },
+            { shaderLocation: 1, offset: 3 * 4, format: "float32x3" },
+          ],
+        },
+      ],
+    },
+    fragment: {
+      module: shaderModule,
+      entryPoint: "fs",
+      targets: [{ format: gpu.viewFormat }],
+      constants: fragmentConstants(gpu),
+    },
+    primitive: { topology: "triangle-list", cullMode: "none" },
+    depthStencil: {
+      format: DEPTH_FORMAT,
+      depthWriteEnabled: true,
+      depthCompare: "less",
+    },
+  });
+
+  function makeObject(color) {
+    const uniformBuffer = device.createBuffer({
+      size: 4 * 16 + 4 * 4, // mat4 + vec4
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    });
+
+    const bindGroup = device.createBindGroup({
+      layout: pipeline.getBindGroupLayout(0),
+      entries: [{ binding: 0, resource: { buffer: uniformBuffer } }],
+    });
+
+    return {
+      uniformBuffer,
+      bindGroup,
+      color: new Float32Array(color),
+      model: mat4.identity(),
+      vertexBuffer: cubeBuffer,
+      vertexCount: 36,
+    };
+  }
+
+  const objects = [
+    makeObject([0.612, 0.376, 0.722, 1.0]),
+    makeObject([0.949, 0.922, 0.208, 1.0]),
+    makeObject([0.09, 0.54, 0.06, 1.0]),
+  ];
+
+  objects[1].model = mat4.multiply(
+    mat4.translate(0.6, -0.4, 0.25),
+    mat4.multiply(mat4.rotateY(0.4), mat4.scale(0.25, 0.25, 0.25)),
+  );
+  objects[2].model = mat4.multiply(
+    mat4.translate(0.0, -0.6, 0.3),
+    mat4.multiply(mat4.rotateX(0.3), mat4.scale(0.4, 0.15, 0.2)),
+  );
+
+  // --------------- UI Stuff --------------------
   // Example of wiring a control. Add a folder per part as you go.
-  const f = panel.folder('Scene');
-  f.toggle('debug axes', state, 'debugAxes');
-  f.note('Add your objects in src/scene/scene.js.');
+  const f = panel.folder("Scene");
+  f.toggle("debug axes", state, "debugAxes");
+  f.note("Add your objects in src/scene/scene.js.");
+
+  const fa = panel.folder("Part A");
+  const trsToggle = fa.toggle("use TRS (SRT if unchecked)", state, "useTRS");
+  const sTx = fa.slider("translate X", state, "tx", -1.5, 1.5, 0.01);
+  const sTy = fa.slider("translate Y", state, "ty", -1.0, 1.0, 0.01);
+  const sTz = fa.slider("translate Z", state, "tz", 0.05, 1.0, 0.01);
+  const sRx = fa.slider("rotate X", state, "rotX", -Math.PI, Math.PI, 0.01);
+  const sRy = fa.slider("rotate Y", state, "rotY", -Math.PI, Math.PI, 0.01);
+  const sRz = fa.slider("rotate Z", state, "rotZ", -Math.PI, Math.PI, 0.01);
+  const sSx = fa.slider("scale X", state, "scaleX", 0.05, 0.8, 0.01);
+  const sSy = fa.slider("scale Y", state, "scaleY", 0.05, 0.8, 0.01);
+  const sSz = fa.slider("scale Z", state, "scaleZ", 0.05, 0.8, 0.01);
+  const matReadout = fa.text("");
+
+  function drawObject(pass, viewProj, obj) {
+    const mvp = mat4.multiply(viewProj, obj.model);
+    device.queue.writeBuffer(obj.uniformBuffer, 0, mvp);
+    device.queue.writeBuffer(obj.uniformBuffer, 64, obj.color);
+
+    pass.setPipeline(pipeline);
+    pass.setBindGroup(0, obj.bindGroup);
+    pass.setVertexBuffer(0, obj.vertexBuffer);
+    pass.draw(obj.vertexCount);
+    renderer.countDraw(obj.vertexCount);
+  }
 
   return {
     state,
 
     update(dt, time) {
       // TODO: animate nodes, then root.updateWorld()
+      const T = mat4.translate(state.tx, state.ty, state.tz);
+      const R = mat4.multiply(
+        mat4.rotateX(state.rotX),
+        mat4.multiply(mat4.rotateY(state.rotY), mat4.rotateZ(state.rotZ)),
+      );
+      const S = mat4.scale(state.scaleX, state.scaleY, state.scaleZ);
+
+      const mTRS = mat4.multiply(T, mat4.multiply(R, S));
+      const mSRT = mat4.multiply(S, mat4.multiply(R, T));
+
+      objects[0].model = state.useTRS ? mTRS : mSRT;
+
+      matReadout.set(
+        "M = TRS:\n" +
+          mat4.format(mTRS) +
+          "\n\n" +
+          "M = SRT:\n" +
+          mat4.format(mSRT),
+      );
     },
 
     /** @param {GPURenderPassEncoder} pass  @param {Float32Array} viewProj  P · V */
     draw(pass, viewProj) {
       // TODO: one draw per object, with  mvp = viewProj · model
+      for (const obj of objects) {
+        drawObject(pass, viewProj, obj);
+      }
     },
 
     reset() {
       // TODO: put every object (and the camera, in main.js) back where it started
+      state.tx = -0.6;
+      state.ty = 0.2;
+      state.tz = 0.3;
+      state.rotX = 0.1;
+      state.rotY = 0.2;
+      state.rotZ = 0.5;
+      state.scaleX = 0.35;
+      state.scaleY = 0.2;
+      state.scaleZ = 0.2;
+      state.useTRS = true;
+      trsToggle.update();
+      sTx.update();
+      sTy.update();
+      sTz.update();
+      sRx.update();
+      sRy.update();
+      sRz.update();
+      sSx.update();
+      sSy.update();
+      sSz.update();
     },
   };
 }
