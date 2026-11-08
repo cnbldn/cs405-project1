@@ -30,6 +30,7 @@ import { createShader, fragmentConstants } from "../render/shader.js";
 import { DEPTH_FORMAT } from "../render/renderer.js";
 import { cube } from "./geometry.js";
 import * as mat4 from "../math/mat4.js";
+import { SceneNode } from "./node.js";
 
 export function createScene({ gpu, renderer, painting, panel }) {
   const { device } = gpu;
@@ -47,6 +48,9 @@ export function createScene({ gpu, renderer, painting, panel }) {
     scaleY: 0.2,
     scaleZ: 0.2,
     useTRS: true,
+
+    // part B
+    animate: true,
   };
 
   // cube stuff
@@ -122,6 +126,49 @@ export function createScene({ gpu, renderer, painting, panel }) {
     mat4.multiply(mat4.rotateX(0.3), mat4.scale(0.4, 0.15, 0.2)),
   );
 
+  function makeNode(name, local, color, scaleVec) {
+    const node = new SceneNode(name, local);
+    node.data.obj = makeObject(color);
+    node.data.scale = mat4.scale(scaleVec[0], scaleVec[1], scaleVec[2]);
+    return node;
+  }
+
+  const root = makeNode(
+    "base",
+    mat4.translate(0.55, 0.25, 0.25),
+    [0.8, 0.3, 0.2, 1],
+    [0.18, 0.18, 0.18],
+  );
+  const arm1 = makeNode(
+    "arm1",
+    mat4.translate(0, 0.22, 0),
+    [0.9, 0.6, 0.2, 1],
+    [0.08, 0.3, 0.08],
+  );
+  const wrist = makeNode(
+    "wrist",
+    mat4.translate(0, 0.22, 0),
+    [0.2, 0.7, 0.8, 1],
+    [0.24, 0.07, 0.07],
+  );
+  const fingerL = makeNode(
+    "fingerL",
+    mat4.translate(-0.1, 0.1, 0),
+    [0.3, 0.85, 0.5, 1],
+    [0.05, 0.14, 0.05],
+  );
+  const fingerR = makeNode(
+    "fingerR",
+    mat4.translate(0.1, 0.1, 0),
+    [0.3, 0.85, 0.5, 1],
+    [0.05, 0.14, 0.05],
+  );
+
+  root.addChild(arm1);
+  arm1.addChild(wrist);
+  wrist.addChild(fingerL);
+  wrist.addChild(fingerR);
+
   // --------------- UI Stuff --------------------
   // Example of wiring a control. Add a folder per part as you go.
   const f = panel.folder("Scene");
@@ -141,6 +188,10 @@ export function createScene({ gpu, renderer, painting, panel }) {
   const sSz = fa.slider("scale Z", state, "scaleZ", 0.05, 0.8, 0.01);
   const matReadout = fa.text("");
 
+  const fb = panel.folder("Part B");
+  const animateToggle = fb.toggle("animate", state, "animate");
+
+  // --------------- Helper Functions --------------------
   function drawObject(pass, viewProj, obj) {
     const mvp = mat4.multiply(viewProj, obj.model);
     device.queue.writeBuffer(obj.uniformBuffer, 0, mvp);
@@ -158,6 +209,8 @@ export function createScene({ gpu, renderer, painting, panel }) {
 
     update(dt, time) {
       // TODO: animate nodes, then root.updateWorld()
+
+      // part A
       const T = mat4.translate(state.tx, state.ty, state.tz);
       const R = mat4.multiply(
         mat4.rotateX(state.rotX),
@@ -177,14 +230,31 @@ export function createScene({ gpu, renderer, painting, panel }) {
           "M = SRT:\n" +
           mat4.format(mSRT),
       );
+
+      // part B
+      arm1.local = mat4.multiply(
+        mat4.translate(0, 0.22, 0),
+        mat4.rotateZ(Math.sin(time * 1.5) * 0.6),
+      );
+      wrist.local = mat4.multiply(
+        mat4.translate(0, 0.22, 0),
+        mat4.rotateY(time * 1.2),
+      );
+      root.updateWorld();
     },
 
     /** @param {GPURenderPassEncoder} pass  @param {Float32Array} viewProj  P · V */
     draw(pass, viewProj) {
-      // TODO: one draw per object, with  mvp = viewProj · model
       for (const obj of objects) {
         drawObject(pass, viewProj, obj);
       }
+
+      root.traverse((node) => {
+        if (node.data.obj) {
+          node.data.obj.model = mat4.multiply(node.world, node.data.scale);
+          drawObject(pass, viewProj, node.data.obj);
+        }
+      });
     },
 
     reset() {
@@ -209,6 +279,8 @@ export function createScene({ gpu, renderer, painting, panel }) {
       sSx.update();
       sSy.update();
       sSz.update();
+
+      animateToggle.update();
     },
   };
 }
