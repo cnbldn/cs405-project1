@@ -54,21 +54,17 @@ export function createScene({ gpu, renderer, painting, panel }) {
     animate: true,
   };
 
-  // cube stuff
-  const cubeVerts = cube();
-  const cubeBuffer = device.createBuffer({
-    size: cubeVerts.byteLength,
-    usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
-  });
-  device.queue.writeBuffer(cubeBuffer, 0, cubeVerts);
+  function makeMesh(verts) {
+    const buffer = device.createBuffer({
+      size: verts.byteLength,
+      usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+    });
+    device.queue.writeBuffer(buffer, 0, verts);
+    return { buffer, vertexCount: verts.length / 6 };
+  }
 
-  // pyramid stuff
-  const pyramidVerts = pyramid();
-  const pyramidBuffer = device.createBuffer({
-    size: pyramidVerts.byteLength,
-    usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
-  });
-  device.queue.writeBuffer(pyramidBuffer, 0, pyramidVerts);
+  const cubeMesh = makeMesh(cube());
+  const pyramidMesh = makeMesh(pyramid());
 
   const shaderModule = createShader(device, meshWGSL, "mesh");
   const pipeline = device.createRenderPipeline({
@@ -138,7 +134,7 @@ export function createScene({ gpu, renderer, painting, panel }) {
     },
   });
 
-  function makeObject(color) {
+  function makeObject(color, mesh = cubeMesh) {
     const uniformBuffer = device.createBuffer({
       size: 4 * 16 + 4 * 4, // mat4 + vec4
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
@@ -153,15 +149,14 @@ export function createScene({ gpu, renderer, painting, panel }) {
       bindGroup,
       color: new Float32Array(color),
       model: mat4.identity(),
-      vertexBuffer: cubeBuffer,
-      vertexCount: 36,
+      mesh,
     };
   }
 
   const objects = [
     makeObject([0.55, 0.52, 0.48, 1.0]), // boulder
     makeObject([0.85, 0.78, 0.65, 1.0]), // mansion body
-    makeObject([0.72, 0.32, 0.2, 1.0]), // mansion roof
+    makeObject([0.72, 0.32, 0.2, 1.0], pyramidMesh), // mansion roof
   ];
 
   // mansion body
@@ -172,8 +167,6 @@ export function createScene({ gpu, renderer, painting, panel }) {
 
   // mansion roof
   // TODO: refactor so this 2 lines aren't needed
-  objects[2].vertexBuffer = pyramidBuffer;
-  objects[2].vertexCount = 18;
   objects[2].model = mat4.multiply(
     mat4.translate(0.02, -0.1, 0.15),
     mat4.multiply(mat4.rotateY(-0.15), mat4.scale(0.26, 0.09, 0.2)),
@@ -265,8 +258,8 @@ export function createScene({ gpu, renderer, painting, panel }) {
 
     pass.setPipeline(pipeline);
     pass.setBindGroup(0, obj.bindGroup);
-    pass.setVertexBuffer(0, obj.vertexBuffer);
-    pass.draw(obj.vertexCount);
+    pass.setVertexBuffer(0, obj.mesh.buffer);
+    pass.draw(obj.mesh.vertexCount);
     renderer.countDraw(obj.vertexCount);
   }
 
