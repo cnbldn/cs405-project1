@@ -6,6 +6,7 @@
 
 /** Unit cube centred at the origin (side 1), 36 vertices with face normals. */
 export function cube() {
+  // prettier-ignore
   const faces = [
     // normal      u axis      v axis
     [[ 1, 0, 0], [0, 0, -1], [0, 1, 0]],
@@ -17,11 +18,48 @@ export function cube() {
   ];
   const out = [];
   for (const [n, u, v] of faces) {
-    const corner = (su, sv) => [0, 1, 2].map((i) => 0.5 * n[i] + 0.5 * su * u[i] + 0.5 * sv * v[i]);
-    const quad = [corner(-1, -1), corner(1, -1), corner(1, 1), corner(-1, -1), corner(1, 1), corner(-1, 1)];
+    const corner = (su, sv) =>
+      [0, 1, 2].map((i) => 0.5 * n[i] + 0.5 * su * u[i] + 0.5 * sv * v[i]);
+    const quad = [
+      corner(-1, -1),
+      corner(1, -1),
+      corner(1, 1),
+      corner(-1, -1),
+      corner(1, 1),
+      corner(-1, 1),
+    ];
     for (const p of quad) out.push(...p, ...n);
   }
   return new Float32Array(out);
+}
+
+export function pyramid() {
+  const top = [0, 0.5, 0];
+  const fl = [-0.5, -0.5, 0.5];
+  const fr = [0.5, -0.5, 0.5];
+  const br = [0.5, -0.5, -0.5];
+  const bl = [-0.5, -0.5, -0.5];
+
+  const nFront = [0, 0.45, 0.89];
+  const nRight = [0.89, 0.45, 0];
+  const nBack = [0, 0.45, -0.89];
+  const nLeft = [-0.89, 0.45, 0];
+  const nDown = [0, -1, 0];
+
+  // prettier-ignore
+  return new Float32Array([
+    // front
+    ...fl, ...nFront, ...fr, ...nFront, ...top, ...nFront,
+    // right
+    ...fr, ...nRight, ...br, ...nRight, ...top, ...nRight,
+    // back
+    ...br, ...nBack,  ...bl, ...nBack,  ...top, ...nBack,
+    // left
+    ...bl, ...nLeft,  ...fl, ...nLeft,  ...top, ...nLeft,
+    // bottom (quad so 2 triangles)
+    ...fl, ...nDown,  ...bl, ...nDown,  ...br, ...nDown,
+    ...fl, ...nDown,  ...br, ...nDown,  ...fr, ...nDown,
+  ]);
 }
 
 /**
@@ -29,6 +67,7 @@ export function cube() {
  * (topology 'line-list'), as [x, y, z, r, g, b] — x red, y green, z blue.
  */
 export function axes(len = 1) {
+  // prettier-ignore
   return new Float32Array([
     0, 0, 0, 1, 0, 0, len, 0, 0, 1, 0, 0,
     0, 0, 0, 0, 1, 0, 0, len, 0, 0, 1, 0,
