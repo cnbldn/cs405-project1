@@ -197,35 +197,35 @@ export function createScene({ gpu, renderer, painting, panel }) {
     [0.38, 0.25, 0.14, 1],
     [0.06, 0.22, 0.06],
   );
-  const arm1 = makeNode(
+  const mainBranch = makeNode(
     "mainBranch",
     mat4.translate(0, 0.16, 0),
     [0.42, 0.28, 0.15, 1],
     [0.05, 0.16, 0.05],
   );
-  const wrist = makeNode(
+  const crown = makeNode(
     "crown",
     mat4.translate(-0.02, 0.14, 0),
     [0.55, 0.43, 0.12, 1],
     [0.26, 0.2, 0.16],
   );
-  const fingerL = makeNode(
+  const foliageL = makeNode(
     "foliageL",
     mat4.translate(-0.14, 0.04, 0.02),
     [0.48, 0.38, 0.1, 1],
     [0.16, 0.15, 0.14],
   );
-  const fingerR = makeNode(
+  const foliageR = makeNode(
     "foliageR",
     mat4.translate(0.08, 0.1, -0.02),
     [0.6, 0.48, 0.14, 1],
     [0.18, 0.14, 0.14],
   );
 
-  root.addChild(arm1);
-  arm1.addChild(wrist);
-  wrist.addChild(fingerL);
-  wrist.addChild(fingerR);
+  root.addChild(mainBranch);
+  mainBranch.addChild(crown);
+  crown.addChild(foliageL);
+  crown.addChild(foliageR);
   root.updateWorld();
 
   // --------------- UI Stuff --------------------
@@ -260,7 +260,7 @@ export function createScene({ gpu, renderer, painting, panel }) {
     pass.setBindGroup(0, obj.bindGroup);
     pass.setVertexBuffer(0, obj.mesh.buffer);
     pass.draw(obj.mesh.vertexCount);
-    renderer.countDraw(obj.vertexCount);
+    renderer.countDraw(obj.mesh.vertexCount);
   }
 
   return {
@@ -292,13 +292,13 @@ export function createScene({ gpu, renderer, painting, panel }) {
 
       // part B
       if (state.animate) {
-        arm1.local = mat4.multiply(
-          mat4.translate(0, 0.22, 0),
-          mat4.rotateZ(Math.sin(time * 1.5) * 0.6),
+        mainBranch.local = mat4.multiply(
+          mat4.rotateZ(Math.sin(time * 1.8) * 0.12),
+          mat4.translate(0, 0.16, 0),
         );
-        wrist.local = mat4.multiply(
-          mat4.translate(0, 0.22, 0),
-          mat4.rotateY(time * 1.2),
+        crown.local = mat4.multiply(
+          mat4.rotateZ(Math.sin(time * 1.8 - 0.5) * 0.15),
+          mat4.translate(-0.02, 0.14, 0),
         );
         root.updateWorld();
       }
