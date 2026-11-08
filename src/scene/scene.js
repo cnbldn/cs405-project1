@@ -35,7 +35,8 @@ export function createScene({ gpu, renderer, painting, panel }) {
   const { device } = gpu;
   const state = {
     debugAxes: false,
-    // state for one of objects for part A
+
+    // part A: state for one of objects
     tx: -0.6,
     ty: 0.2,
     tz: 0.3,
@@ -91,7 +92,6 @@ export function createScene({ gpu, renderer, painting, panel }) {
       size: 4 * 16 + 4 * 4, // mat4 + vec4
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
-
     const bindGroup = device.createBindGroup({
       layout: pipeline.getBindGroupLayout(0),
       entries: [{ binding: 0, resource: { buffer: uniformBuffer } }],
