@@ -232,15 +232,17 @@ export function createScene({ gpu, renderer, painting, panel }) {
       );
 
       // part B
-      arm1.local = mat4.multiply(
-        mat4.translate(0, 0.22, 0),
-        mat4.rotateZ(Math.sin(time * 1.5) * 0.6),
-      );
-      wrist.local = mat4.multiply(
-        mat4.translate(0, 0.22, 0),
-        mat4.rotateY(time * 1.2),
-      );
-      root.updateWorld();
+      if (state.animate) {
+        arm1.local = mat4.multiply(
+          mat4.translate(0, 0.22, 0),
+          mat4.rotateZ(Math.sin(time * 1.5) * 0.6),
+        );
+        wrist.local = mat4.multiply(
+          mat4.translate(0, 0.22, 0),
+          mat4.rotateY(time * 1.2),
+        );
+        root.updateWorld();
+      }
     },
 
     /** @param {GPURenderPassEncoder} pass  @param {Float32Array} viewProj  P · V */
