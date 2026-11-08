@@ -37,6 +37,7 @@ export function createScene({ gpu, renderer, painting, panel }) {
   const { device } = gpu;
   const state = {
     debugAxes: false,
+    drawObjects: true,
 
     // part A: state for one of objects
     tx: 0.35,
@@ -232,6 +233,7 @@ export function createScene({ gpu, renderer, painting, panel }) {
   // Example of wiring a control. Add a folder per part as you go.
   const f = panel.folder("Scene");
   f.toggle("debug axes", state, "debugAxes");
+  f.toggle("draw objects", state, "drawObjects");
   f.note("Add your objects in src/scene/scene.js.");
 
   const fa = panel.folder("Part A");
@@ -267,8 +269,6 @@ export function createScene({ gpu, renderer, painting, panel }) {
     state,
 
     update(dt, time) {
-      // TODO: animate nodes, then root.updateWorld()
-
       // part A
       const T = mat4.translate(state.tx, state.ty, state.tz);
       const R = mat4.multiply(
@@ -306,7 +306,7 @@ export function createScene({ gpu, renderer, painting, panel }) {
 
     /** @param {GPURenderPassEncoder} pass  @param {Float32Array} viewProj  P · V */
     draw(pass, viewProj) {
-      // TODO: toggle all objects visibility with checkbox.
+      if (!state.drawObjects) return;
       for (const obj of objects) {
         drawObject(pass, viewProj, obj);
       }
@@ -329,7 +329,6 @@ export function createScene({ gpu, renderer, painting, panel }) {
     },
 
     reset() {
-      // TODO: put every object (and the camera, in main.js) back where it started
       state.tx = 0.35;
       state.ty = -0.55;
       state.tz = 0.2;
