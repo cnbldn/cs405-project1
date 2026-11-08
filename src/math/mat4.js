@@ -18,12 +18,13 @@
  * No maths libraries (no gl-matrix, no Three.js). Tests: tests/mat4.test.js
  */
 import { todo } from "./todo.js";
+import * as vec3 from "./vec3.js";
 
 /* ------------------------------------------------------------- Part A ---- */
 
 /** The 4×4 identity. */
 export function identity() {
-  return new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]);
+  return new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
 }
 
 /** A · B (apply B first, then A). Must not modify a or b. */
@@ -33,9 +34,9 @@ export function multiply(a, b) {
     for (let row = 0; row < 4; row++) {
       let sum = 0;
       for (let k = 0; k < 4; k++) {
-        sum += a[4*k + row] * b[4*col + k];
+        sum += a[4 * k + row] * b[4 * col + k];
       }
-      out[4*col + row] = sum;
+      out[4 * col + row] = sum;
     }
   }
   return out;
@@ -43,7 +44,7 @@ export function multiply(a, b) {
 
 /** Translation by (tx, ty, tz). */
 export function translate(tx, ty, tz) {
-  return new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, tx,ty,tz,1]);
+  return new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, tx, ty, tz, 1]);
 }
 
 /** Rotation by `rad` about the x axis. */
@@ -51,7 +52,7 @@ export function rotateX(rad) {
   const c = Math.cos(rad);
   const s = Math.sin(rad);
 
-  return new Float32Array([1,0,0,0, 0,c,s,0, 0,-s,c,0, 0,0,0,1]);
+  return new Float32Array([1, 0, 0, 0, 0, c, s, 0, 0, -s, c, 0, 0, 0, 0, 1]);
 }
 
 /** Rotation by `rad` about the y axis. */
@@ -59,7 +60,7 @@ export function rotateY(rad) {
   const c = Math.cos(rad);
   const s = Math.sin(rad);
 
-  return new Float32Array([c,0,-s,0, 0,1,0,0, s,0,c,0, 0,0,0,1]);
+  return new Float32Array([c, 0, -s, 0, 0, 1, 0, 0, s, 0, c, 0, 0, 0, 0, 1]);
 }
 
 /** Rotation by `rad` about the z axis. */
@@ -67,12 +68,12 @@ export function rotateZ(rad) {
   const c = Math.cos(rad);
   const s = Math.sin(rad);
 
-  return new Float32Array([c,s,0,0, -s,c,0,0, 0,0,1,0, 0,0,0,1]);
+  return new Float32Array([c, s, 0, 0, -s, c, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
 }
 
 /** Non-uniform scale by (sx, sy, sz). */
 export function scale(sx, sy, sz) {
-  return new Float32Array([sx,0,0,0, 0,sy,0,0, 0,0,sz,0, 0,0,0,1]);
+  return new Float32Array([sx, 0, 0, 0, 0, sy, 0, 0, 0, 0, sz, 0, 0, 0, 0, 1]);
 }
 
 /** Mᵀ */
@@ -97,7 +98,24 @@ export function transpose(m) {
   const m34 = m[14];
   const m44 = m[15];
 
-  return new Float32Array([m11,m12,m13,m14, m21,m22,m23,m24, m31,m32,m33,m34, m41,m42,m43,m44]);
+  return new Float32Array([
+    m11,
+    m12,
+    m13,
+    m14,
+    m21,
+    m22,
+    m23,
+    m24,
+    m31,
+    m32,
+    m33,
+    m34,
+    m41,
+    m42,
+    m43,
+    m44,
+  ]);
 }
 
 /**
@@ -124,11 +142,28 @@ export function invertRigid(m) {
   const tz = m[14];
 
   // -A^(-1)t
-  const txNew = -(m11*tx + m21*ty + m31*tz);
-  const tyNew = -(m12*tx + m22*ty + m32*tz);
-  const tzNew = -(m13*tx + m23*ty + m33*tz);
+  const txNew = -(m11 * tx + m21 * ty + m31 * tz);
+  const tyNew = -(m12 * tx + m22 * ty + m32 * tz);
+  const tzNew = -(m13 * tx + m23 * ty + m33 * tz);
 
-  return new Float32Array([m11,m12,m13,0, m21,m22,m23,0, m31,m32,m33,0, txNew,tyNew,tzNew,1]);
+  return new Float32Array([
+    m11,
+    m12,
+    m13,
+    0,
+    m21,
+    m22,
+    m23,
+    0,
+    m31,
+    m32,
+    m33,
+    0,
+    txNew,
+    tyNew,
+    tzNew,
+    1,
+  ]);
 }
 
 /** M · v for a 4-component v = [x, y, z, w]; returns [x', y', z', w']. */
@@ -158,11 +193,12 @@ export function transformVec4(m, v) {
   const m34 = m[14];
   const m44 = m[15];
 
-  return new Float32Array([m11*x + m12*y + m13*z + m14*w,
-          m21*x + m22*y + m23*z + m24*w,
-          m31*x + m32*y + m33*z + m34*w,
-          m41*x + m42*y + m43*z + m44*w
-          ]);
+  return new Float32Array([
+    m11 * x + m12 * y + m13 * z + m14 * w,
+    m21 * x + m22 * y + m23 * z + m24 * w,
+    m31 * x + m32 * y + m33 * z + m34 * w,
+    m41 * x + m42 * y + m43 * z + m44 * w,
+  ]);
 }
 
 /* ------------------------------------------------------------- Part C ---- */
@@ -174,7 +210,27 @@ export function transformVec4(m, v) {
  * eye, target, up: [x, y, z]
  */
 export function lookAt(eye, target, up) {
-  return todo("mat4.lookAt");
+  const w = vec3.normalize(vec3.sub(eye, target));
+
+  let uRaw = vec3.cross(up, w);
+  if (vec3.length(uRaw) < 1e-6) {
+    const fakeUp = Math.abs(w[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0];
+    uRaw = vec3.cross(fakeUp, w);
+  }
+  const u = vec3.normalize(uRaw);
+  const v = vec3.cross(w, u);
+
+  const tx = -vec3.dot(u, eye);
+  const ty = -vec3.dot(v, eye);
+  const tz = -vec3.dot(w, eye);
+
+  // prettier-ignore
+  return new Float32Array([
+    u[0], v[0], w[0], 0,
+    u[1], v[1], w[1], 0,
+    u[2], v[2], w[2], 0,
+    tx,   ty,   tz,   1,
+  ]);
 }
 
 /**
@@ -183,7 +239,16 @@ export function lookAt(eye, target, up) {
  * near, far: positive distances along −z.
  */
 export function perspective(fovY, aspect, near, far) {
-  return todo("mat4.perspective");
+  const f = 1.0 / Math.tan(fovY / 2);
+  const nf = 1.0 / (near - far);
+
+  // prettier-ignore
+  return new Float32Array([
+    f/aspect, 0, 0,           0,
+    0,        f, 0,           0,
+    0,        0, far*nf,     -1,
+    0,        0, near*far*nf, 0,
+  ]);
 }
 
 /**
@@ -191,7 +256,21 @@ export function perspective(fovY, aspect, near, far) {
  * x ∈ [left, right], y ∈ [bottom, top], z ∈ [−near, −far] in view space.
  */
 export function orthographic(left, right, bottom, top, near, far) {
-  return todo("mat4.orthographic");
+  const rl = 1.0 / (right - left);
+  const tb = 1.0 / (top - bottom);
+  const nf = 1.0 / (near - far);
+
+  const tx = -(right + left) * rl;
+  const ty = -(top + bottom) * tb;
+  const tz = near * nf;
+
+  // prettier-ignore
+  return new Float32Array([
+    2*rl, 0,      0,  0,
+    0,    2*tb, 0,  0,
+    0,    0,      nf, 0,
+    tx,   ty,     tz, 1,
+  ]);
 }
 
 /* ------------------------------------------------- provided (not graded) - */
