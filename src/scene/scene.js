@@ -28,7 +28,7 @@
 import meshWGSL from "../render/shaders/mesh.wgsl?raw";
 import { createShader, fragmentConstants } from "../render/shader.js";
 import { DEPTH_FORMAT } from "../render/renderer.js";
-import { cube, axes } from "./geometry.js";
+import { cube, pyramid, axes } from "./geometry.js";
 import * as mat4 from "../math/mat4.js";
 import { SceneNode } from "./node.js";
 import lineWGSL from "../render/shaders/line.wgsl?raw";
@@ -39,15 +39,15 @@ export function createScene({ gpu, renderer, painting, panel }) {
     debugAxes: false,
 
     // part A: state for one of objects
-    tx: -0.6,
-    ty: 0.2,
-    tz: 0.3,
+    tx: 0.35,
+    ty: -0.55,
+    tz: 0.2,
     rotX: 0.1,
     rotY: 0.2,
-    rotZ: 0.5,
-    scaleX: 0.35,
-    scaleY: 0.2,
-    scaleZ: 0.2,
+    rotZ: 0.3,
+    scaleX: 0.14,
+    scaleY: 0.1,
+    scaleZ: 0.12,
     useTRS: true,
 
     // part B
@@ -61,6 +61,14 @@ export function createScene({ gpu, renderer, painting, panel }) {
     usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
   });
   device.queue.writeBuffer(cubeBuffer, 0, cubeVerts);
+
+  // pyramid stuff
+  const pyramidVerts = pyramid();
+  const pyramidBuffer = device.createBuffer({
+    size: pyramidVerts.byteLength,
+    usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+  });
+  device.queue.writeBuffer(pyramidBuffer, 0, pyramidVerts);
 
   const shaderModule = createShader(device, meshWGSL, "mesh");
   const pipeline = device.createRenderPipeline({
@@ -151,18 +159,24 @@ export function createScene({ gpu, renderer, painting, panel }) {
   }
 
   const objects = [
-    makeObject([0.612, 0.376, 0.722, 1.0]),
-    makeObject([0.949, 0.922, 0.208, 1.0]),
-    makeObject([0.09, 0.54, 0.06, 1.0]),
+    makeObject([0.55, 0.52, 0.48, 1.0]), // boulder
+    makeObject([0.85, 0.78, 0.65, 1.0]), // mansion body
+    makeObject([0.72, 0.32, 0.2, 1.0]), // mansion roof
   ];
 
+  // mansion body
   objects[1].model = mat4.multiply(
-    mat4.translate(0.6, -0.4, 0.25),
-    mat4.multiply(mat4.rotateY(0.4), mat4.scale(0.25, 0.25, 0.25)),
+    mat4.translate(0.02, -0.22, 0.15),
+    mat4.multiply(mat4.rotateY(-0.15), mat4.scale(0.22, 0.16, 0.16)),
   );
+
+  // mansion roof
+  // TODO: refactor so this 2 lines aren't needed
+  objects[2].vertexBuffer = pyramidBuffer;
+  objects[2].vertexCount = 18;
   objects[2].model = mat4.multiply(
-    mat4.translate(0.0, -0.6, 0.3),
-    mat4.multiply(mat4.rotateX(0.3), mat4.scale(0.4, 0.15, 0.2)),
+    mat4.translate(0.02, -0.1, 0.15),
+    mat4.multiply(mat4.rotateY(-0.15), mat4.scale(0.26, 0.09, 0.2)),
   );
 
   function makeNode(name, local, color, scaleVec) {
@@ -185,40 +199,41 @@ export function createScene({ gpu, renderer, painting, panel }) {
   }
 
   const root = makeNode(
-    "base",
-    mat4.translate(0.55, 0.25, 0.25),
-    [0.8, 0.3, 0.2, 1],
-    [0.18, 0.18, 0.18],
+    "trunk",
+    mat4.translate(0.62, -0.38, 0.18),
+    [0.38, 0.25, 0.14, 1],
+    [0.06, 0.22, 0.06],
   );
   const arm1 = makeNode(
-    "arm1",
-    mat4.translate(0, 0.22, 0),
-    [0.9, 0.6, 0.2, 1],
-    [0.08, 0.3, 0.08],
+    "mainBranch",
+    mat4.translate(0, 0.16, 0),
+    [0.42, 0.28, 0.15, 1],
+    [0.05, 0.16, 0.05],
   );
   const wrist = makeNode(
-    "wrist",
-    mat4.translate(0, 0.22, 0),
-    [0.2, 0.7, 0.8, 1],
-    [0.24, 0.07, 0.07],
+    "crown",
+    mat4.translate(-0.02, 0.14, 0),
+    [0.55, 0.43, 0.12, 1],
+    [0.26, 0.2, 0.16],
   );
   const fingerL = makeNode(
-    "fingerL",
-    mat4.translate(-0.1, 0.1, 0),
-    [0.3, 0.85, 0.5, 1],
-    [0.05, 0.14, 0.05],
+    "foliageL",
+    mat4.translate(-0.14, 0.04, 0.02),
+    [0.48, 0.38, 0.1, 1],
+    [0.16, 0.15, 0.14],
   );
   const fingerR = makeNode(
-    "fingerR",
-    mat4.translate(0.1, 0.1, 0),
-    [0.3, 0.85, 0.5, 1],
-    [0.05, 0.14, 0.05],
+    "foliageR",
+    mat4.translate(0.08, 0.1, -0.02),
+    [0.6, 0.48, 0.14, 1],
+    [0.18, 0.14, 0.14],
   );
 
   root.addChild(arm1);
   arm1.addChild(wrist);
   wrist.addChild(fingerL);
   wrist.addChild(fingerR);
+  root.updateWorld();
 
   // --------------- UI Stuff --------------------
   // Example of wiring a control. Add a folder per part as you go.
@@ -298,6 +313,7 @@ export function createScene({ gpu, renderer, painting, panel }) {
 
     /** @param {GPURenderPassEncoder} pass  @param {Float32Array} viewProj  P · V */
     draw(pass, viewProj) {
+      // TODO: toggle all objects visibility with checkbox.
       for (const obj of objects) {
         drawObject(pass, viewProj, obj);
       }
@@ -321,15 +337,15 @@ export function createScene({ gpu, renderer, painting, panel }) {
 
     reset() {
       // TODO: put every object (and the camera, in main.js) back where it started
-      state.tx = -0.6;
-      state.ty = 0.2;
-      state.tz = 0.3;
+      state.tx = 0.35;
+      state.ty = -0.55;
+      state.tz = 0.2;
       state.rotX = 0.1;
       state.rotY = 0.2;
-      state.rotZ = 0.5;
-      state.scaleX = 0.35;
-      state.scaleY = 0.2;
-      state.scaleZ = 0.2;
+      state.rotZ = 0.3;
+      state.scaleX = 0.14;
+      state.scaleY = 0.1;
+      state.scaleZ = 0.12;
       state.useTRS = true;
       trsToggle.update();
       sTx.update();
