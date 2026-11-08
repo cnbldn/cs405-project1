@@ -28,9 +28,10 @@
 import meshWGSL from "../render/shaders/mesh.wgsl?raw";
 import { createShader, fragmentConstants } from "../render/shader.js";
 import { DEPTH_FORMAT } from "../render/renderer.js";
-import { cube } from "./geometry.js";
+import { cube, axes } from "./geometry.js";
 import * as mat4 from "../math/mat4.js";
 import { SceneNode } from "./node.js";
+import lineWGSL from "../render/shaders/line.wgsl?raw";
 
 export function createScene({ gpu, renderer, painting, panel }) {
   const { device } = gpu;
@@ -91,6 +92,44 @@ export function createScene({ gpu, renderer, painting, panel }) {
     },
   });
 
+  // axes stuff
+  const axesVerts = axes(0.2);
+  const axesBuffer = device.createBuffer({
+    size: axesVerts.byteLength,
+    usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+  });
+  device.queue.writeBuffer(axesBuffer, 0, axesVerts);
+
+  const lineShader = createShader(device, lineWGSL, "line");
+  const linePipeline = device.createRenderPipeline({
+    layout: "auto",
+    vertex: {
+      module: lineShader,
+      entryPoint: "vs",
+      buffers: [
+        {
+          arrayStride: 6 * 4,
+          attributes: [
+            { shaderLocation: 0, offset: 0, format: "float32x3" },
+            { shaderLocation: 1, offset: 3 * 4, format: "float32x3" },
+          ],
+        },
+      ],
+    },
+    fragment: {
+      module: lineShader,
+      entryPoint: "fs",
+      targets: [{ format: gpu.viewFormat }],
+      constants: fragmentConstants(gpu),
+    },
+    primitive: { topology: "line-list" },
+    depthStencil: {
+      format: DEPTH_FORMAT,
+      depthWriteEnabled: true,
+      depthCompare: "less",
+    },
+  });
+
   function makeObject(color) {
     const uniformBuffer = device.createBuffer({
       size: 4 * 16 + 4 * 4, // mat4 + vec4
@@ -130,6 +169,18 @@ export function createScene({ gpu, renderer, painting, panel }) {
     const node = new SceneNode(name, local);
     node.data.obj = makeObject(color);
     node.data.scale = mat4.scale(scaleVec[0], scaleVec[1], scaleVec[2]);
+
+    const axesUniform = device.createBuffer({
+      size: 4 * 16 + 4 * 4, // mat4 + vec4
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    });
+    const axesBindGroup = device.createBindGroup({
+      layout: linePipeline.getBindGroupLayout(0),
+      entries: [{ binding: 0, resource: { buffer: axesUniform } }],
+    });
+    node.data.axesUniform = axesUniform;
+    node.data.axesBindGroup = axesBindGroup;
+
     return node;
   }
 
@@ -255,6 +306,15 @@ export function createScene({ gpu, renderer, painting, panel }) {
         if (node.data.obj) {
           node.data.obj.model = mat4.multiply(node.world, node.data.scale);
           drawObject(pass, viewProj, node.data.obj);
+        }
+        if (state.debugAxes && node.data.axesBindGroup) {
+          const mvp = mat4.multiply(viewProj, node.world);
+          device.queue.writeBuffer(node.data.axesUniform, 0, mvp);
+          pass.setPipeline(linePipeline);
+          pass.setBindGroup(0, node.data.axesBindGroup);
+          pass.setVertexBuffer(0, axesBuffer);
+          pass.draw(6);
+          renderer.countDraw(6);
         }
       });
     },
