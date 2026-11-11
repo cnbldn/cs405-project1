@@ -32,6 +32,7 @@ import { cube, pyramid, axes, frustumLines } from "./geometry.js";
 import * as mat4 from "../math/mat4.js";
 import { SceneNode } from "./node.js";
 import lineWGSL from "../render/shaders/line.wgsl?raw";
+import * as curves from "../math/curves.js";
 
 export function createScene({ gpu, renderer, painting, panel }) {
   const { device } = gpu;
@@ -53,6 +54,11 @@ export function createScene({ gpu, renderer, painting, panel }) {
 
     // part B
     animate: true,
+
+    // part D
+    curveKind: "bezier-c1",
+    deCasteljauT: 0.5,
+    showDeCasteljau: true,
   };
 
   function makeMesh(verts) {
@@ -243,6 +249,54 @@ export function createScene({ gpu, renderer, painting, panel }) {
   crown.addChild(foliageR);
   root.updateWorld();
 
+  // part D
+  const defaultPts = [
+    [-0.72, -0.18],
+    [-0.5, -0.22],
+    [-0.32, -0.25],
+    [-0.12, -0.28],
+    [0.08, -0.31],
+    [0.15, -0.35],
+    [0.25, -0.45],
+    [0.35, -0.55],
+    [0.48, -0.68],
+    [0.65, -0.82],
+  ];
+  const controlPts = defaultPts.map((p) => [...p]);
+
+  function enforceC1() {
+    controlPts[4] = curves.c1NextControl(controlPts[2], controlPts[3]);
+    controlPts[7] = curves.c1NextControl(controlPts[5], controlPts[6]);
+  }
+  enforceC1();
+
+  function getSegments() {
+    return [
+      [controlPts[0], controlPts[1], controlPts[2], controlPts[3]],
+      [controlPts[3], controlPts[4], controlPts[5], controlPts[6]],
+      [controlPts[6], controlPts[7], controlPts[8], controlPts[9]],
+    ];
+  }
+
+  const cpObjects = controlPts.map((_, i) =>
+    makeObject(
+      i === 4 || i === 7 ? [1.0, 0.5, 0.1, 1.0] : [1.0, 0.9, 0.2, 1.0],
+    ),
+  );
+
+  const curveBuffer = device.createBuffer({
+    size: 1000 * 6 * 4,
+    usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+  });
+  const curveUniform = device.createBuffer({
+    size: 64,
+    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+  });
+  const curveBindGroup = device.createBindGroup({
+    layout: linePipeline.getBindGroupLayout(0),
+    entries: [{ binding: 0, resource: { buffer: curveUniform } }],
+  });
+
   // --------------- UI Stuff --------------------
   // Example of wiring a control. Add a folder per part as you go.
   const f = panel.folder("Scene");
@@ -266,6 +320,16 @@ export function createScene({ gpu, renderer, painting, panel }) {
   const fb = panel.folder("Part B");
   const animateToggle = fb.toggle("animate", state, "animate");
 
+  const fd = panel.folder("Part D");
+  const curveKindSelect = fd.select(
+    "curve family",
+    ["bezier-c1", "catmull-rom"],
+    state.curveKind,
+    (v) => (state.curveKind = v),
+  );
+  const dcToggle = fd.toggle("show de Casteljau", state, "showDeCasteljau");
+  const sDcT = fd.slider("de Casteljau t", state, "deCasteljauT", 0, 1, 0.01);
+
   // --------------- Helper Functions --------------------
   function drawObject(pass, viewProj, obj) {
     const mvp = mat4.multiply(viewProj, obj.model);
@@ -277,6 +341,81 @@ export function createScene({ gpu, renderer, painting, panel }) {
     pass.setVertexBuffer(0, obj.mesh.buffer);
     pass.draw(obj.mesh.vertexCount);
     renderer.countDraw(obj.mesh.vertexCount);
+  }
+
+  function drawCurve(pass, viewProj) {
+    enforceC1();
+    const segs = getSegments();
+    const z = 0.02;
+    const verts = [];
+    const addLine = (a, b, c) =>
+      verts.push(a[0], a[1], z, ...c, b[0], b[1], z, ...c);
+
+    for (let i = 0; i < controlPts.length - 1; i++) {
+      addLine(controlPts[i], controlPts[i + 1], [0.5, 0.5, 0.5]);
+    }
+
+    const steps = 60;
+    if (state.curveKind === "bezier-c1") {
+      for (let i = 0; i < steps; i++) {
+        const pA = curves.evalPiecewise(segs, i / steps);
+        const pB = curves.evalPiecewise(segs, (i + 1) / steps);
+        addLine(pA, pB, [1.0, 0.25, 0.2]);
+      }
+    } else {
+      for (let s = 0; s < controlPts.length - 3; s++) {
+        for (let i = 0; i < 20; i++) {
+          const pA = curves.catmullRom(
+            controlPts[s],
+            controlPts[s + 1],
+            controlPts[s + 2],
+            controlPts[s + 3],
+            i / 20,
+          );
+          const pB = curves.catmullRom(
+            controlPts[s],
+            controlPts[s + 1],
+            controlPts[s + 2],
+            controlPts[s + 3],
+            (i + 1) / 20,
+          );
+          addLine(pA, pB, [0.2, 0.9, 0.4]);
+        }
+      }
+    }
+
+    if (state.showDeCasteljau && state.curveKind === "bezier-c1") {
+      const levels = curves.deCasteljau(segs[0], state.deCasteljauT);
+      const cols = [
+        [0.3, 0.8, 1.0],
+        [0.9, 0.3, 1.0],
+      ];
+      for (let l = 1; l < levels.length - 1; l++) {
+        const pts = levels[l];
+        for (let i = 0; i < pts.length - 1; i++) {
+          addLine(pts[i], pts[i + 1], cols[l - 1]);
+        }
+      }
+    }
+
+    const data = new Float32Array(verts);
+    device.queue.writeBuffer(curveBuffer, 0, data);
+    device.queue.writeBuffer(curveUniform, 0, viewProj);
+
+    pass.setPipeline(linePipeline);
+    pass.setBindGroup(0, curveBindGroup);
+    pass.setVertexBuffer(0, curveBuffer);
+    pass.draw(data.length / 6);
+    renderer.countDraw(data.length / 6);
+
+    for (let i = 0; i < controlPts.length; i++) {
+      const [x, y] = controlPts[i];
+      cpObjects[i].model = mat4.multiply(
+        mat4.translate(x, y, z),
+        mat4.scale(0.03, 0.03, 0.03),
+      );
+      drawObject(pass, viewProj, cpObjects[i]);
+    }
   }
 
   return {
@@ -323,6 +462,7 @@ export function createScene({ gpu, renderer, painting, panel }) {
       if (!state.drawObjects) return;
       for (const obj of objects) {
         drawObject(pass, viewProj, obj);
+        drawCurve(pass, viewProj);
       }
 
       root.traverse((node) => {
