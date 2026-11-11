@@ -28,7 +28,7 @@
 import meshWGSL from "../render/shaders/mesh.wgsl?raw";
 import { createShader, fragmentConstants } from "../render/shader.js";
 import { DEPTH_FORMAT } from "../render/renderer.js";
-import { cube, pyramid, axes } from "./geometry.js";
+import { cube, pyramid, axes, frustumLines } from "./geometry.js";
 import * as mat4 from "../math/mat4.js";
 import { SceneNode } from "./node.js";
 import lineWGSL from "../render/shaders/line.wgsl?raw";
@@ -133,6 +133,20 @@ export function createScene({ gpu, renderer, painting, panel }) {
       depthWriteEnabled: true,
       depthCompare: "less",
     },
+  });
+
+  // frustum stuff
+  const frustumBuffer = device.createBuffer({
+    size: 24 * 6 * 4,
+    usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+  });
+  const frustumUniform = device.createBuffer({
+    size: 64,
+    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+  });
+  const frustumBindGroup = device.createBindGroup({
+    layout: linePipeline.getBindGroupLayout(0),
+    entries: [{ binding: 0, resource: { buffer: frustumUniform } }],
   });
 
   function makeObject(color, mesh = cubeMesh) {
@@ -326,6 +340,22 @@ export function createScene({ gpu, renderer, painting, panel }) {
           renderer.countDraw(6);
         }
       });
+    },
+
+    drawFrustum(pass, viewProj, cam, aspect) {
+      const verts = frustumLines(cam, aspect);
+      device.queue.writeBuffer(frustumBuffer, 0, verts);
+
+      const camView = mat4.lookAt(cam.eye, cam.target, cam.up);
+      const camWorld = mat4.invertRigid(camView);
+      const mvp = mat4.multiply(viewProj, camWorld);
+      device.queue.writeBuffer(frustumUniform, 0, mvp);
+
+      pass.setPipeline(linePipeline);
+      pass.setBindGroup(0, frustumBindGroup);
+      pass.setVertexBuffer(0, frustumBuffer);
+      pass.draw(24);
+      renderer.countDraw(24);
     },
 
     reset() {

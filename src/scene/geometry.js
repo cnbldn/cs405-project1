@@ -74,3 +74,38 @@ export function axes(len = 1) {
     0, 0, 0, 0, 0, 1, 0, 0, len, 0, 0, 1,
   ]);
 }
+
+export function frustumLines(cam, aspect) {
+  const tan = Math.tan(cam.fovY / 2);
+  const nh =
+    cam.projection === "orthographic" ? cam.orthoHeight / 2 : cam.near * tan;
+  const nw = nh * aspect;
+  const fh =
+    cam.projection === "orthographic" ? cam.orthoHeight / 2 : cam.far * tan;
+  const fw = fh * aspect;
+
+  const n = [
+    [-nw, -nh, -cam.near],
+    [nw, -nh, -cam.near],
+    [nw, nh, -cam.near],
+    [-nw, nh, -cam.near],
+  ];
+  const f = [
+    [-fw, -fh, -cam.far],
+    [fw, -fh, -cam.far],
+    [fw, fh, -cam.far],
+    [-fw, fh, -cam.far],
+  ];
+
+  const out = [];
+  const line = (a, b, c) => out.push(...a, ...c, ...b, ...c);
+  const colNear = [1.0, 0.85, 0.2];
+  const colFar = [0.3, 0.8, 1.0];
+
+  for (let i = 0; i < 4; i++) {
+    line(n[i], n[(i + 1) % 4], colNear);
+    line(f[i], f[(i + 1) % 4], colFar);
+    line([0, 0, 0], f[i], colFar);
+  }
+  return new Float32Array(out);
+}

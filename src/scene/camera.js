@@ -8,20 +8,30 @@
  * matrix, so the starter shows your painting from the first `npm run dev`.
  * The panel tells you which of the two is active.
  */
-import * as mat4 from '../math/mat4.js';
-import { NotImplemented } from '../math/todo.js';
+import * as mat4 from "../math/mat4.js";
+import { NotImplemented } from "../math/todo.js";
 
 export function createCamera() {
   return {
     eye: [0, 0, 2.8],
     target: [0, 0, 0],
     up: [0, 1, 0],
+    yaw: 0,
+    pitch: 0,
+    radius: 2.8,
     fovY: Math.PI / 4, // radians
     near: 0.1,
     far: 100,
-    projection: 'perspective', // or 'orthographic'
+    projection: "perspective", // or 'orthographic'
     orthoHeight: 2.2, // world units visible vertically in orthographic mode
   };
+}
+
+export function updateCamera(cam) {
+  const cospitch = Math.cos(cam.pitch);
+  cam.eye[0] = cam.target[0] + cam.radius * cospitch * Math.sin(cam.yaw);
+  cam.eye[1] = cam.target[1] + cam.radius * Math.sin(cam.pitch);
+  cam.eye[2] = cam.target[2] + cam.radius * cospitch * Math.cos(cam.yaw);
 }
 
 /**
@@ -34,8 +44,9 @@ export function viewProjection(cam, aspect, paintingAspect = 1) {
   try {
     const view = mat4.lookAt(cam.eye, cam.target, cam.up);
     let proj;
-    if (cam.projection === 'orthographic') {
-      const h = cam.orthoHeight / 2, w = h * aspect;
+    if (cam.projection === "orthographic") {
+      const h = cam.orthoHeight / 2,
+        w = h * aspect;
       proj = mat4.orthographic(-w, w, -h, h, cam.near, cam.far);
     } else {
       proj = mat4.perspective(cam.fovY, aspect, cam.near, cam.far);
@@ -43,7 +54,11 @@ export function viewProjection(cam, aspect, paintingAspect = 1) {
     return { matrix: mat4.multiply(proj, view), fallback: false };
   } catch (e) {
     if (!(e instanceof NotImplemented)) throw e;
-    return { matrix: fitMatrix(aspect, paintingAspect), fallback: true, missing: e.message };
+    return {
+      matrix: fitMatrix(aspect, paintingAspect),
+      fallback: true,
+      missing: e.message,
+    };
   }
 }
 
@@ -56,9 +71,21 @@ export function viewProjection(cam, aspect, paintingAspect = 1) {
 function fitMatrix(aspect, paintingAspect) {
   const s = 0.92 * Math.min(1, aspect / paintingAspect);
   return new Float32Array([
-    s / aspect, 0, 0, 0,
-    0, s, 0, 0,
-    0, 0, -0.05, 0,
-    0, 0, 0.5, 1,
+    s / aspect,
+    0,
+    0,
+    0,
+    0,
+    s,
+    0,
+    0,
+    0,
+    0,
+    -0.05,
+    0,
+    0,
+    0,
+    0.5,
+    1,
   ]);
 }
