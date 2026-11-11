@@ -11,19 +11,39 @@
  *
  * Tests: tests/curves.test.js
  */
-import { todo } from './todo.js';
+import { todo } from "./todo.js";
 
 /* ---------------------------------------------------------- Bézier ------ */
 
 /** The four cubic Bernstein basis values [B0(t), B1(t), B2(t), B3(t)]. */
-export function bernstein3(t) { return todo('curves.bernstein3'); }
+export function bernstein3(t) {
+  const u = 1 - t;
+  return [u * u * u, 3 * u * u * t, 3 * u * t * t, t * t * t];
+}
 
 /** Point on the cubic Bézier curve with control points p0..p3 at t ∈ [0, 1]. */
-export function cubicBezier(p0, p1, p2, p3, t) { return todo('curves.cubicBezier'); }
+export function cubicBezier(p0, p1, p2, p3, t) {
+  const b = bernstein3(t);
+  const out = [];
+  for (let i = 0; i < p0.length; i++) {
+    out.push(b[0] * p0[i] + b[1] * p1[i] + b[2] * p2[i] + b[3] * p3[i]);
+  }
+  return out;
+}
 
 /** First derivative dB/dt of the cubic Bézier at t (not normalised). */
 export function cubicBezierTangent(p0, p1, p2, p3, t) {
-  return todo('curves.cubicBezierTangent');
+  const u = 1 - t;
+  const c0 = 3 * u * u;
+  const c1 = 6 * u * t;
+  const c2 = 3 * t * t;
+  const out = [];
+  for (let i = 0; i < p0.length; i++) {
+    out.push(
+      c0 * (p1[i] - p0[i]) + c1 * (p2[i] - p1[i]) + c2 * (p3[i] - p2[i]),
+    );
+  }
+  return out;
 }
 
 /**
@@ -34,7 +54,25 @@ export function cubicBezierTangent(p0, p1, p2, p3, t) {
  *   …
  *   levels[n − 1] = [the point on the curve]
  */
-export function deCasteljau(points, t) { return todo('curves.deCasteljau'); }
+export function deCasteljau(points, t) {
+  const levels = [points.map((p) => [...p])];
+  let current = levels[0];
+  while (current.length > 1) {
+    const next = [];
+    for (let i = 0; i < current.length - 1; i++) {
+      const a = current[i];
+      const b = current[i + 1];
+      const pt = [];
+      for (let d = 0; d < a.length; d++) {
+        pt.push((1 - t) * a[d] + t * b[d]);
+      }
+      next.push(pt);
+    }
+    levels.push(next);
+    current = next;
+  }
+  return levels;
+}
 
 /* ----------------------------------------------- piecewise, C¹ joints --- */
 
@@ -42,14 +80,27 @@ export function deCasteljau(points, t) { return todo('curves.deCasteljau'); }
  * Given the last two control points P2, P3 of one segment, return the P1 of
  * the NEXT segment that makes the joint at P3 C¹-continuous.
  */
-export function c1NextControl(p2, p3) { return todo('curves.c1NextControl'); }
+export function c1NextControl(p2, p3) {
+  const out = [];
+  for (let i = 0; i < p2.length; i++) {
+    out.push(2 * p3[i] - p2[i]);
+  }
+  return out;
+}
 
 /**
  * Evaluate a piecewise cubic Bézier at a global parameter u ∈ [0, 1] that
  * runs over the whole curve: with n segments, segment i covers
  * u ∈ [i/n, (i+1)/n]. u = 0 is the first P0, u = 1 the last P3.
  */
-export function evalPiecewise(segments, u) { return todo('curves.evalPiecewise'); }
+export function evalPiecewise(segments, u) {
+  const n = segments.length;
+  const s = Math.max(0, Math.min(1, u)) * n;
+  const idx = Math.min(Math.floor(s), n - 1);
+  const t = s - idx;
+  const seg = segments[idx];
+  return cubicBezier(seg[0], seg[1], seg[2], seg[3], t);
+}
 
 /* ---------------------------- second curve family: implement ONE -------- */
 /* The tests skip whichever of the two you leave as a TODO, and fail only   */
@@ -59,10 +110,26 @@ export function evalPiecewise(segments, u) { return todo('curves.evalPiecewise')
  * Uniform Catmull–Rom: the segment between p1 and p2 (passes through both),
  * t ∈ [0, 1], with tangents (p2 − p0)/2 at p1 and (p3 − p1)/2 at p2.
  */
-export function catmullRom(p0, p1, p2, p3, t) { return todo('curves.catmullRom'); }
+export function catmullRom(p0, p1, p2, p3, t) {
+  const t2 = t * t;
+  const t3 = t2 * t;
+  const out = [];
+  for (let i = 0; i < p0.length; i++) {
+    const a = 2 * p1[i];
+    const b = -p0[i] + p2[i];
+    const c = 2 * p0[i] - 5 * p1[i] + 4 * p2[i] - p3[i];
+    const d = -p0[i] + 3 * p1[i] - 3 * p2[i] + p3[i];
+    out.push(0.5 * (a + b * t + c * t2 + d * t3));
+  }
+  return out;
+}
 
 /** Uniform cubic B-spline basis values [N0(t), N1(t), N2(t), N3(t)]. */
-export function bsplineBasis(t) { return todo('curves.bsplineBasis'); }
+export function bsplineBasis(t) {
+  return todo("curves.bsplineBasis");
+}
 
 /** Point on the uniform cubic B-spline segment controlled by p0..p3. */
-export function bspline(p0, p1, p2, p3, t) { return todo('curves.bspline'); }
+export function bspline(p0, p1, p2, p3, t) {
+  return todo("curves.bspline");
+}
