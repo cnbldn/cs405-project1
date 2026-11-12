@@ -1,5 +1,6 @@
 struct Uniforms {
     mvp: mat4x4f,
+    model: mat4x4f,
     color: vec4f,
 }
 
@@ -15,7 +16,8 @@ struct VSOut {
 fn vs(@location(0) pos: vec3f, @location(1) normal: vec3f) -> VSOut {
     var out: VSOut;
     out.position = u.mvp * vec4f(pos, 1.0);
-    out.normal = normal;
+    // approx world normal (ignoring non-uniform scale inverse-transpose for simplicity)
+    out.normal = normalize((u.model * vec4f(normal, 0.0)).xyz);
     return out;
 }
 

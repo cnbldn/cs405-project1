@@ -9,7 +9,12 @@ import "./ui/style.css";
 import { initWebGPU, showFatal } from "./render/gpu.js";
 import { Renderer } from "./render/renderer.js";
 import { Painting } from "./render/painting.js";
-import { createCamera, viewProjection, updateCamera } from "./scene/camera.js";
+import {
+  createCamera,
+  viewProjection,
+  updateCamera,
+  ndcToPaintingPlane,
+} from "./scene/camera.js";
 import { createScene } from "./scene/scene.js";
 import { createPanel } from "./ui/panel.js";
 import { Stats } from "./ui/stats.js";
@@ -50,13 +55,20 @@ async function main() {
   );
 
   const camera = createCamera();
-  const inspectCamera = {
-    ...createCamera(),
-    eye: [4.5, 2.5, 5.5],
-    target: [0, 0, 0.5],
-    near: 0.1,
-    far: 50,
-  };
+  function createInspectCamera() {
+    const ic = {
+      ...createCamera(),
+      target: [0, 0, 0.5],
+      yaw: 0.68,
+      pitch: 0.38,
+      radius: 6.5,
+      near: 0.1,
+      far: 50,
+    };
+    updateCamera(ic);
+    return ic;
+  }
+  const inspectCamera = createInspectCamera();
   const camState = { inspectMode: false };
   const cf = panel.folder("Camera");
   const inspectToggle = cf.toggle(
@@ -81,6 +93,7 @@ async function main() {
   const vf = panel.folder("View");
   vf.button("reset", () => {
     Object.assign(camera, createCamera());
+    Object.assign(inspectCamera, createInspectCamera());
     proj.set(camera.projection);
     sFov.update();
     sNear.update();
@@ -97,19 +110,37 @@ async function main() {
 
   /* -------------- input --------------- */
   attachPointer(canvas, {
-    // TODO: (Part C): orbit the camera on drag, zoom on wheel.
-    // TODO: (Part D): pick / drag control points on the painting.
+    down(e) {
+      if (camState.inspectMode) return;
+      const aspect = canvas.width / canvas.height;
+      scene.pickPoint(ndcToPaintingPlane(camera, aspect, e.ndc));
+    },
     drag(e) {
-      camera.yaw -= e.dx * 0.007;
-      camera.pitch = Math.max(-1.5, Math.min(1.5, camera.pitch + e.dy * 0.007));
-      updateCamera(camera);
+      const aspect = canvas.width / canvas.height;
+      const activeCam = camState.inspectMode ? inspectCamera : camera;
+      if (
+        !camState.inspectMode &&
+        scene.dragPoint(ndcToPaintingPlane(camera, aspect, e.ndc))
+      ) {
+        return;
+      }
+      activeCam.yaw -= e.dx * 0.007;
+      activeCam.pitch = Math.max(
+        -1.5,
+        Math.min(1.5, activeCam.pitch + e.dy * 0.007),
+      );
+      updateCamera(activeCam);
+    },
+    up() {
+      scene.releasePoint();
     },
     wheel(e) {
-      camera.radius = Math.max(
+      const activeCam = camState.inspectMode ? inspectCamera : camera;
+      activeCam.radius = Math.max(
         0.5,
-        Math.min(20, camera.radius + e.delta * 0.002),
+        Math.min(20, activeCam.radius + e.delta * 0.002),
       );
-      updateCamera(camera);
+      updateCamera(activeCam);
     },
   });
 

@@ -40,6 +40,7 @@ export function pyramid() {
   const br = [0.5, -0.5, -0.5];
   const bl = [-0.5, -0.5, -0.5];
 
+  // side normals: slope is 2:1 so ny = 1/sqrt(5) ≈ 0.45, nx/nz = 2/sqrt(5) ≈ 0.89
   const nFront = [0, 0.45, 0.89];
   const nRight = [0.89, 0.45, 0];
   const nBack = [0, 0.45, -0.89];
@@ -57,8 +58,8 @@ export function pyramid() {
     // left
     ...bl, ...nLeft,  ...fl, ...nLeft,  ...top, ...nLeft,
     // bottom (quad so 2 triangles)
-    ...fl, ...nDown,  ...bl, ...nDown,  ...br, ...nDown,
-    ...fl, ...nDown,  ...br, ...nDown,  ...fr, ...nDown,
+    ...fl, ...nDown,  ...bl, ...nDown,  ...fr, ...nDown,
+    ...fr, ...nDown,  ...bl, ...nDown,  ...br, ...nDown,
   ]);
 }
 
@@ -105,7 +106,10 @@ export function frustumLines(cam, aspect) {
   for (let i = 0; i < 4; i++) {
     line(n[i], n[(i + 1) % 4], colNear);
     line(f[i], f[(i + 1) % 4], colFar);
-    line([0, 0, 0], f[i], colFar);
+    line(n[i], f[i], colFar);
+    if (cam.projection !== "orthographic") {
+      line([0, 0, 0], n[i], colNear);
+    }
   }
   return new Float32Array(out);
 }

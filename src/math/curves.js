@@ -81,11 +81,8 @@ export function deCasteljau(points, t) {
  * the NEXT segment that makes the joint at P3 C¹-continuous.
  */
 export function c1NextControl(p2, p3) {
-  const out = [];
-  for (let i = 0; i < p2.length; i++) {
-    out.push(2 * p3[i] - p2[i]);
-  }
-  return out;
+  // P3 - P2 = P1_next - P3  =>  P1_next = 2*P3 - P2
+  return p2.map((v, i) => 2 * p3[i] - v);
 }
 
 /**

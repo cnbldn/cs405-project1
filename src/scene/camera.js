@@ -9,6 +9,7 @@
  * The panel tells you which of the two is active.
  */
 import * as mat4 from "../math/mat4.js";
+import * as vec3 from "../math/vec3.js";
 import { NotImplemented } from "../math/todo.js";
 
 export function createCamera() {
@@ -88,4 +89,37 @@ function fitMatrix(aspect, paintingAspect) {
     0.5,
     1,
   ]);
+}
+
+export function ndcToPaintingPlane(cam, aspect, ndc) {
+  const [nx, ny] = ndc;
+  const w = vec3.normalize(vec3.sub(cam.eye, cam.target));
+  let uRaw = vec3.cross(cam.up, w);
+  if (vec3.length(uRaw) < 1e-6) {
+    const fakeUp = Math.abs(w[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0];
+    uRaw = vec3.cross(fakeUp, w);
+  }
+  const u = vec3.normalize(uRaw);
+  const v = vec3.cross(w, u);
+  const f = vec3.scale(w, -1);
+
+  if (cam.projection === "orthographic") {
+    const h = cam.orthoHeight / 2;
+    const width = h * aspect;
+    const ox = cam.eye[0] + nx * width * u[0] + ny * h * v[0];
+    const oy = cam.eye[1] + nx * width * u[1] + ny * h * v[1];
+    const oz = cam.eye[2] + nx * width * u[2] + ny * h * v[2];
+    if (Math.abs(f[2]) < 1e-6) return null;
+    const t = -oz / f[2];
+    return [ox + t * f[0], oy + t * f[1]];
+  } else {
+    const h = Math.tan(cam.fovY / 2);
+    const width = h * aspect;
+    const dx = f[0] + nx * width * u[0] + ny * h * v[0];
+    const dy = f[1] + nx * width * u[1] + ny * h * v[1];
+    const dz = f[2] + nx * width * u[2] + ny * h * v[2];
+    if (Math.abs(dz) < 1e-6) return null;
+    const t = -cam.eye[2] / dz;
+    return [cam.eye[0] + t * dx, cam.eye[1] + t * dy];
+  }
 }

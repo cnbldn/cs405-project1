@@ -18,17 +18,29 @@
  * The painting quad spans x ∈ [−a, a], y ∈ [−1, 1] at z = 0 (a = image
  * width / height), so  u = (x + a) / (2a)  and  v = (1 − y) / 2.
  */
-import { todo } from '../math/todo.js';
+import { todo } from "../math/todo.js";
 
 /** TODO (Part D): build the object above from your curve data. */
-export function curveToJSON(curve) {
-  return todo('curveToJSON');
+export function curveToJSON({ paintingId, kind, aspect, segments, points }) {
+  const toUV = ([x, y]) => [
+    +((x + aspect) / (2 * aspect)).toFixed(4),
+    +((1 - y) / 2).toFixed(4),
+  ];
+
+  return {
+    painting: paintingId,
+    kind,
+    segments: segments.map((seg) => seg.map(toUV)),
+    points: points.map(toUV),
+  };
 }
 
 /** Provided: save any object as a .json download in the browser. */
-export function downloadJSON(obj, filename = 'curve.json') {
-  const blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
-  const a = document.createElement('a');
+export function downloadJSON(obj, filename = "curve.json") {
+  const blob = new Blob([JSON.stringify(obj, null, 2)], {
+    type: "application/json",
+  });
+  const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
   a.download = filename;
   a.click();

@@ -33,6 +33,7 @@ import * as mat4 from "../math/mat4.js";
 import { SceneNode } from "./node.js";
 import lineWGSL from "../render/shaders/line.wgsl?raw";
 import * as curves from "../math/curves.js";
+import { curveToJSON, downloadJSON } from "./curveExport.js";
 
 export function createScene({ gpu, renderer, painting, panel }) {
   const { device } = gpu;
@@ -57,8 +58,9 @@ export function createScene({ gpu, renderer, painting, panel }) {
 
     // part D
     curveKind: "bezier-c1",
-    deCasteljauT: 0.5,
+    deCasteljauT: 0.35,
     showDeCasteljau: true,
+    showPolygon: true,
   };
 
   function makeMesh(verts) {
@@ -143,7 +145,7 @@ export function createScene({ gpu, renderer, painting, panel }) {
 
   // frustum stuff
   const frustumBuffer = device.createBuffer({
-    size: 24 * 6 * 4,
+    size: 32 * 6 * 4,
     usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
   });
   const frustumUniform = device.createBuffer({
@@ -157,7 +159,7 @@ export function createScene({ gpu, renderer, painting, panel }) {
 
   function makeObject(color, mesh = cubeMesh) {
     const uniformBuffer = device.createBuffer({
-      size: 4 * 16 + 4 * 4, // mat4 + vec4
+      size: 2 * 64 + 16, // mvp (mat4) + model (mat4) + color (vec4)
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
     const bindGroup = device.createBindGroup({
@@ -180,17 +182,15 @@ export function createScene({ gpu, renderer, painting, panel }) {
     makeObject([0.72, 0.32, 0.2, 1.0], pyramidMesh), // mansion roof
   ];
 
-  // mansion body
-  objects[1].model = mat4.multiply(
+  // shared base transform so roof sits on top of the mansion body
+  const mansionFrame = mat4.multiply(
     mat4.translate(0.02, -0.22, 0.15),
-    mat4.multiply(mat4.rotateY(-0.15), mat4.scale(0.22, 0.16, 0.16)),
+    mat4.rotateY(-0.15),
   );
-
-  // mansion roof
-  // TODO: refactor so this 2 lines aren't needed
+  objects[1].model = mat4.multiply(mansionFrame, mat4.scale(0.22, 0.16, 0.16));
   objects[2].model = mat4.multiply(
-    mat4.translate(0.02, -0.1, 0.15),
-    mat4.multiply(mat4.rotateY(-0.15), mat4.scale(0.26, 0.09, 0.2)),
+    mansionFrame,
+    mat4.multiply(mat4.translate(0, 0.12, 0), mat4.scale(0.26, 0.09, 0.2)),
   );
 
   function makeNode(name, local, color, scaleVec) {
@@ -199,7 +199,7 @@ export function createScene({ gpu, renderer, painting, panel }) {
     node.data.scale = mat4.scale(scaleVec[0], scaleVec[1], scaleVec[2]);
 
     const axesUniform = device.createBuffer({
-      size: 4 * 16 + 4 * 4, // mat4 + vec4
+      size: 4 * 16, // mat4
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
     const axesBindGroup = device.createBindGroup({
@@ -251,22 +251,35 @@ export function createScene({ gpu, renderer, painting, panel }) {
 
   // part D
   const defaultPts = [
-    [-0.72, -0.18],
-    [-0.5, -0.22],
-    [-0.32, -0.25],
-    [-0.12, -0.28],
-    [0.08, -0.31],
-    [0.15, -0.35],
-    [0.25, -0.45],
-    [0.35, -0.55],
-    [0.48, -0.68],
-    [0.65, -0.82],
+    [-0.813, -0.282],
+    [-0.614, -0.292],
+    [-0.28, -0.3],
+    [-0.673, -0.369],
+    [-1.066, -0.438],
+    [-0.462, -0.496],
+    [-0.269, -0.517],
+    [-0.076, -0.538],
+    [0.04, -0.776],
+    [0.053, -0.999],
   ];
-  const controlPts = defaultPts.map((p) => [...p]);
 
-  function enforceC1() {
-    controlPts[4] = curves.c1NextControl(controlPts[2], controlPts[3]);
-    controlPts[7] = curves.c1NextControl(controlPts[5], controlPts[6]);
+  const controlPts = defaultPts.map((p) => [...p]);
+  window.controlPts = controlPts;
+
+  function enforceC1(moved = -1) {
+    for (let k = 3; k < controlPts.length - 1; k += 3) {
+      if (moved === k + 1) {
+        controlPts[k - 1] = curves.c1NextControl(
+          controlPts[k + 1],
+          controlPts[k],
+        );
+      } else {
+        controlPts[k + 1] = curves.c1NextControl(
+          controlPts[k - 1],
+          controlPts[k],
+        );
+      }
+    }
   }
   enforceC1();
 
@@ -284,6 +297,18 @@ export function createScene({ gpu, renderer, painting, panel }) {
     ),
   );
 
+  // cubes for de Casteljau intermediate points
+  const dcObjects = [
+    makeObject([0.3, 0.8, 1.0, 1.0]),
+    makeObject([0.3, 0.8, 1.0, 1.0]),
+    makeObject([0.3, 0.8, 1.0, 1.0]),
+    makeObject([0.9, 0.3, 1.0, 1.0]),
+    makeObject([0.9, 0.3, 1.0, 1.0]),
+    makeObject([1.0, 0.3, 0.2, 1.0]),
+  ];
+
+  const curveMover = makeObject([0.9, 0.35, 0.15, 1.0]);
+
   const curveBuffer = device.createBuffer({
     size: 1000 * 6 * 4,
     usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
@@ -300,8 +325,8 @@ export function createScene({ gpu, renderer, painting, panel }) {
   // --------------- UI Stuff --------------------
   // Example of wiring a control. Add a folder per part as you go.
   const f = panel.folder("Scene");
-  f.toggle("debug axes", state, "debugAxes");
-  f.toggle("draw objects", state, "drawObjects");
+  const debugAxesToggle = f.toggle("debug axes", state, "debugAxes");
+  const drawObjectsToggle = f.toggle("draw objects", state, "drawObjects");
   f.note("Add your objects in src/scene/scene.js.");
 
   const fa = panel.folder("Part A");
@@ -327,14 +352,33 @@ export function createScene({ gpu, renderer, painting, panel }) {
     state.curveKind,
     (v) => (state.curveKind = v),
   );
+  const polyToggle = fd.toggle("control polygon", state, "showPolygon");
   const dcToggle = fd.toggle("show de Casteljau", state, "showDeCasteljau");
   const sDcT = fd.slider("de Casteljau t", state, "deCasteljauT", 0, 1, 0.01);
+  fd.button("log points to console", () => {
+    console.log(
+      JSON.stringify(
+        controlPts.map((p) => [+p[0].toFixed(3), +p[1].toFixed(3)]),
+      ),
+    );
+  });
+  fd.button("export JSON", () => {
+    const json = curveToJSON({
+      paintingId: "manzara",
+      kind: state.curveKind,
+      aspect: painting.aspect,
+      segments: getSegments(),
+      points: controlPts,
+    });
+    downloadJSON(json, "curve-export.json");
+  });
 
   // --------------- Helper Functions --------------------
   function drawObject(pass, viewProj, obj) {
     const mvp = mat4.multiply(viewProj, obj.model);
     device.queue.writeBuffer(obj.uniformBuffer, 0, mvp);
-    device.queue.writeBuffer(obj.uniformBuffer, 64, obj.color);
+    device.queue.writeBuffer(obj.uniformBuffer, 64, obj.model);
+    device.queue.writeBuffer(obj.uniformBuffer, 128, obj.color);
 
     pass.setPipeline(pipeline);
     pass.setBindGroup(0, obj.bindGroup);
@@ -343,16 +387,34 @@ export function createScene({ gpu, renderer, painting, panel }) {
     renderer.countDraw(obj.mesh.vertexCount);
   }
 
+  function evalCurve(u) {
+    const segs = getSegments();
+    if (state.curveKind === "bezier-c1") {
+      return curves.evalPiecewise(segs, u);
+    }
+    const n = controlPts.length - 3;
+    const s = Math.max(0, Math.min(1, u)) * n;
+    const i = Math.min(Math.floor(s), n - 1);
+    return curves.catmullRom(
+      controlPts[i],
+      controlPts[i + 1],
+      controlPts[i + 2],
+      controlPts[i + 3],
+      s - i,
+    );
+  }
+
   function drawCurve(pass, viewProj) {
-    enforceC1();
     const segs = getSegments();
     const z = 0.02;
     const verts = [];
     const addLine = (a, b, c) =>
       verts.push(a[0], a[1], z, ...c, b[0], b[1], z, ...c);
 
-    for (let i = 0; i < controlPts.length - 1; i++) {
-      addLine(controlPts[i], controlPts[i + 1], [0.5, 0.5, 0.5]);
+    if (state.showPolygon) {
+      for (let i = 0; i < controlPts.length - 1; i++) {
+        addLine(controlPts[i], controlPts[i + 1], [0.5, 0.5, 0.5]);
+      }
     }
 
     const steps = 60;
@@ -384,16 +446,25 @@ export function createScene({ gpu, renderer, painting, panel }) {
       }
     }
 
+    let dcMarkers = [];
     if (state.showDeCasteljau && state.curveKind === "bezier-c1") {
-      const levels = curves.deCasteljau(segs[0], state.deCasteljauT);
+      const nSegs = segs.length;
+      const s = Math.min(nSegs - 1e-6, state.deCasteljauT * nSegs);
+      const segIdx = Math.floor(s);
+      const localU = s - segIdx;
+      const levels = curves.deCasteljau(segs[segIdx], localU);
       const cols = [
         [0.3, 0.8, 1.0],
         [0.9, 0.3, 1.0],
+        [1.0, 0.3, 0.2],
       ];
-      for (let l = 1; l < levels.length - 1; l++) {
+      for (let l = 1; l < levels.length; l++) {
         const pts = levels[l];
         for (let i = 0; i < pts.length - 1; i++) {
           addLine(pts[i], pts[i + 1], cols[l - 1]);
+        }
+        for (const p of pts) {
+          dcMarkers.push(p);
         }
       }
     }
@@ -408,15 +479,30 @@ export function createScene({ gpu, renderer, painting, panel }) {
     pass.draw(data.length / 6);
     renderer.countDraw(data.length / 6);
 
-    for (let i = 0; i < controlPts.length; i++) {
-      const [x, y] = controlPts[i];
-      cpObjects[i].model = mat4.multiply(
-        mat4.translate(x, y, z),
-        mat4.scale(0.03, 0.03, 0.03),
-      );
-      drawObject(pass, viewProj, cpObjects[i]);
+    if (state.showPolygon) {
+      for (let i = 0; i < controlPts.length; i++) {
+        const [x, y] = controlPts[i];
+        cpObjects[i].model = mat4.multiply(
+          mat4.translate(x, y, z),
+          mat4.scale(0.03, 0.03, 0.03),
+        );
+        drawObject(pass, viewProj, cpObjects[i]);
+      }
     }
+
+    for (let i = 0; i < dcMarkers.length && i < dcObjects.length; i++) {
+      const [x, y] = dcMarkers[i];
+      dcObjects[i].model = mat4.multiply(
+        mat4.translate(x, y, z + 0.01),
+        mat4.scale(0.025, 0.025, 0.025),
+      );
+      drawObject(pass, viewProj, dcObjects[i]);
+    }
+
+    drawObject(pass, viewProj, curveMover);
   }
+
+  let activePt = -1;
 
   return {
     state,
@@ -425,8 +511,8 @@ export function createScene({ gpu, renderer, painting, panel }) {
       // part A
       const T = mat4.translate(state.tx, state.ty, state.tz);
       const R = mat4.multiply(
-        mat4.rotateX(state.rotX),
-        mat4.multiply(mat4.rotateY(state.rotY), mat4.rotateZ(state.rotZ)),
+        mat4.rotateY(state.rotY),
+        mat4.multiply(mat4.rotateX(state.rotX), mat4.rotateZ(state.rotZ)),
       );
       const S = mat4.scale(state.scaleX, state.scaleY, state.scaleZ);
 
@@ -455,6 +541,16 @@ export function createScene({ gpu, renderer, painting, panel }) {
         );
         root.updateWorld();
       }
+
+      // part D
+      const u = state.animate ? (time * 0.15) % 1 : state.deCasteljauT;
+      const pos = evalCurve(u);
+      const nextPos = evalCurve(Math.min(1, u + 0.005));
+      const angle = Math.atan2(nextPos[1] - pos[1], nextPos[0] - pos[0]);
+      curveMover.model = mat4.multiply(
+        mat4.translate(pos[0], pos[1], 0.04),
+        mat4.multiply(mat4.rotateZ(angle), mat4.scale(0.05, 0.05, 0.05)),
+      );
     },
 
     /** @param {GPURenderPassEncoder} pass  @param {Float32Array} viewProj  P · V */
@@ -462,8 +558,8 @@ export function createScene({ gpu, renderer, painting, panel }) {
       if (!state.drawObjects) return;
       for (const obj of objects) {
         drawObject(pass, viewProj, obj);
-        drawCurve(pass, viewProj);
       }
+      drawCurve(pass, viewProj);
 
       root.traverse((node) => {
         if (node.data.obj) {
@@ -494,11 +590,57 @@ export function createScene({ gpu, renderer, painting, panel }) {
       pass.setPipeline(linePipeline);
       pass.setBindGroup(0, frustumBindGroup);
       pass.setVertexBuffer(0, frustumBuffer);
-      pass.draw(24);
-      renderer.countDraw(24);
+      const vertexCount = verts.length / 6;
+      pass.draw(vertexCount);
+      renderer.countDraw(vertexCount);
+    },
+
+    pickPoint(worldXY) {
+      if (!worldXY) return false;
+      const [wx, wy] = worldXY;
+      let best = -1;
+      let bestDist = 0.06;
+      for (let i = 0; i < controlPts.length; i++) {
+        const d = Math.hypot(controlPts[i][0] - wx, controlPts[i][1] - wy);
+        if (d < bestDist) {
+          bestDist = d;
+          best = i;
+        }
+      }
+      activePt = best;
+      return activePt !== -1;
+    },
+
+    dragPoint(worldXY) {
+      if (activePt === -1 || !worldXY) return false;
+      const dx = worldXY[0] - controlPts[activePt][0];
+      const dy = worldXY[1] - controlPts[activePt][1];
+      controlPts[activePt][0] = worldXY[0];
+      controlPts[activePt][1] = worldXY[1];
+
+      if (state.curveKind === "bezier-c1") {
+        if (activePt % 3 === 0) {
+          if (activePt > 0) {
+            controlPts[activePt - 1][0] += dx;
+            controlPts[activePt - 1][1] += dy;
+          }
+          if (activePt < controlPts.length - 1) {
+            controlPts[activePt + 1][0] += dx;
+            controlPts[activePt + 1][1] += dy;
+          }
+        }
+        enforceC1(activePt);
+      }
+      return true;
+    },
+
+    releasePoint() {
+      activePt = -1;
     },
 
     reset() {
+      state.debugAxes = false;
+      state.drawObjects = true;
       state.tx = 0.35;
       state.ty = -0.55;
       state.tz = 0.2;
@@ -509,6 +651,14 @@ export function createScene({ gpu, renderer, painting, panel }) {
       state.scaleY = 0.1;
       state.scaleZ = 0.12;
       state.useTRS = true;
+      state.animate = true;
+      state.curveKind = "bezier-c1";
+      state.deCasteljauT = 0.35;
+      state.showDeCasteljau = true;
+      state.showPolygon = true;
+
+      debugAxesToggle.update();
+      drawObjectsToggle.update();
       trsToggle.update();
       sTx.update();
       sTy.update();
@@ -519,8 +669,16 @@ export function createScene({ gpu, renderer, painting, panel }) {
       sSx.update();
       sSy.update();
       sSz.update();
-
       animateToggle.update();
+      curveKindSelect.set(state.curveKind);
+      polyToggle.update();
+      dcToggle.update();
+      sDcT.update();
+
+      for (let i = 0; i < defaultPts.length; i++) {
+        controlPts[i] = [...defaultPts[i]];
+      }
+      enforceC1();
     },
   };
 }
