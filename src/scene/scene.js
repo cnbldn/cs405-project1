@@ -344,6 +344,7 @@ export function createScene({ gpu, renderer, painting, panel }) {
 
   const fb = panel.folder("Part B");
   const animateToggle = fb.toggle("animate", state, "animate");
+  const leafMatReadout = fb.text(mat4.format(foliageL.world));
 
   const fd = panel.folder("Part D");
   const curveKindSelect = fd.select(
